@@ -20,6 +20,9 @@ int val_2_now = 0;
 
 int count = 0;
 
+//Seconds
+int temp = 0;
+int rotate = 1;
 
 void setup() {
   
@@ -95,6 +98,14 @@ void encoder(){
 
 /************* Controler ****************/
 void every_ms(){
+  if(temp < 600){      //Estos valores son erróneos, hay que hacer una medida de lo que tarda el resto del código y pararlo 1s - lo que tarde el código
+    temp++;
+  }else if(temp < 400){
+    temp = 0;
+    rotate = !rotate;
+  }
+
+  if(rotate){     // La medición de lo que tarda el código se puede ver con la función millis() o micros()
   //Position
   double angularPosition = 2*PI*count/COUNTS_REVOLUTION;
 
@@ -112,6 +123,8 @@ void every_ms(){
   }
 
   set_speed(v);
+
+  }
 }
 
 void set_speed(int spd){
