@@ -1,36 +1,38 @@
 #include <DueTimer.h>
 
 
-//Controler
-#define COUNTS_REVOLUTION 3592
-#define ONE_TICK          COUNTS_REVOLUTION/60
-#define K_P               0.1 //Probar con distintos valores
-#define WAIT_TEMP         1000
+/********* Controler parameters **********/
+#define COUNTS_REVOLUTION   3592                  //Number of encoder's positions
+#define ONE_TICK            COUNTS_REVOLUTION/60  //Desired position
+#define K_P                 0.07                  //Correction constant
+#define WAIT_TEMP           1000                  //Time especification (ms)
 
-#define Normalized_DTCY   2100/12
+#define Normalized_DTCY   2100/12                 //Maximun Duty Cycle / Maximun voltage 
 
-// PINS
+/************ PINS *********************/
 const byte ENCODER_1 = 7;
 const byte ENCODER_2 = 3;
 
-//Encoder States
+/********* Encoder States *************/
 int val_1_last = 0;
 int val_2_last = 0;
-int val_1_now = 0;
-int val_2_now = 0;
+int val_1_now  = 0;
+int val_2_now  = 0;
 
+/********* Encoder position ************/
 int count = 0;
 
-//Seconds
-int temp = 0;
+/*********** Time control *************/
+int temp  = 0;
 
+/************* SET UP ****************/
 void setup() {
   
-  pwm_setup();
+  pwm_setup();            // Sets up a PWM signal on pins 35 and 37, both initialized to 0
 
-  encoder_setup();
+  encoder_setup();        // Sets up interrupts sensitive to encoder's signals
 
-  timer_setup();  
+  timer_setup();          // Sets up an interrupt every millisecond
 
 }
 
@@ -38,12 +40,12 @@ void loop() {
 //NOT USED
 }
 
+/************* PWM **************/
 void pwm_setup(){
   PMC->PMC_PCER1 |= PMC_PCER1_PID36;                   // PWM power ON
 
   PIOC->PIO_PDR |= PIO_PDR_P3|PIO_PDR_P5;              // Set PWM pin to a peripheral
   PIOC->PIO_ABSR |= PIO_PC3B_PWMH0 | PIO_PC5B_PWMH1;   // Set PWM pin peripheral type B for PWMH0 (Arduino pin 35) and PWMH1 (Arduino pin 37)
-
 
   PWM->PWM_CLK = PWM_CLK_PREB(0) | PWM_CLK_DIVB(2);    // select Frequency for clock B: Mck/2 = 42 MHz
   
@@ -58,6 +60,7 @@ void pwm_setup(){
   PWM->PWM_ENA |= PWM_ENA_CHID1 | PWM_ENA_CHID0;       // Enable PWM channel 0 and channel 1
 }
 
+/******** ENCODER **************/
 void encoder_setup(){
   pinMode(ENCODER_1, INPUT);
   pinMode(ENCODER_2, INPUT);
@@ -65,39 +68,41 @@ void encoder_setup(){
   attachInterrupt(digitalPinToInterrupt(ENCODER_2), encoder, CHANGE);
 }
 
-void timer_setup(){                                     // Calls every 1ms
+/********** TIMER **************/
+void timer_setup(){                                     
   Timer1.attachInterrupt(every_ms);
-  Timer1.start(1000);                                   
+  Timer1.start(WAIT_TEMP);                                   
 }
 
+/* ----------------------------- */
 
-/************* Encoder ISR ****************/
+/******** Encoder ISR **********/
 void encoder(){
-  //Encoder States
+  // Update encoder States
   val_1_last = val_1_now;
   val_2_last = val_2_now;
-  
   val_1_now = digitalRead(ENCODER_1);
   val_2_now = digitalRead(ENCODER_2);
-
+  
   //Count
   if(val_1_now != val_1_last){
-    if((val_1_now != val_2_now)){
-      count++;
+    if((val_1_now != val_2_now)){       
+      count++;                          // Rotating clockwise
     }else{
-      count--;
+      count--;                          // Rotating counter clockwise
     }
   }else if(val_2_now != val_2_last) { 
     if((val_1_now != val_2_now)){
-      count--;
+      count--;                         // Rotating counter clockwise
     }else{
-      count++;
+      count++;                         // Rotating clockwise
     }
   }
 } 
 
-/************* Controler ****************/
+/************* Controler ISR ****************/
 void every_ms(){
+    // Updates every second
   if(temp < WAIT_TEMP){
     temp++;
     if(temp == WAIT_TEMP){
@@ -105,30 +110,28 @@ void every_ms(){
       count = 0;
     }
   }
-
-  //Position
-  //double angularPosition = 2*PI*count/COUNTS_REVOLUTION;
-
-  // Error
-  double error = ONE_TICK - count;
-
-  // Input
-  double v = error * K_P;
-
-  // Voltage safety
+    // Gap between the actual position and the desired position
+  double gap = ONE_TICK - count;
+    // Input voltage
+  double v = gap * K_P;
+    // Voltage safety
   if(v > 12){
     v = 12;
   }else if(v < -12){
     v = -12;
   }
+    // Set the PWM input
   set_speed(v);
 }
 
+/********* Duty Cycle by voltage **********/
 void set_speed(int spd){
+    // One way
   if(spd>0){
     PWM->PWM_CH_NUM[1].PWM_CDTYUPD = spd*Normalized_DTCY;
     PWM->PWM_CH_NUM[0].PWM_CDTYUPD = 0;
   }
+    //Another way
   else{
     PWM->PWM_CH_NUM[0].PWM_CDTYUPD = spd*Normalized_DTCY;
     PWM->PWM_CH_NUM[1].PWM_CDTYUPD = 0;   
